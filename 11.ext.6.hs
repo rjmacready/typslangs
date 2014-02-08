@@ -21,8 +21,13 @@ instance Eq Type where
                 all id (map (\(l, r) -> l == r) (zip t1 t2))
          _ == _ = False
 
+--data Pattern =
+--     PVar String
+--     | PRecord [(String, Pattern)]
+
 data Term = 
      Var Int
+     | VarS String
      | Abs Type Term
      | App Term Term
      | TZero
@@ -35,6 +40,7 @@ data Term =
      | Unit
      | Tas Term Type
      | TLet Term Term
+     | TPLet Term Term Term
      | Pair Term Term
      | FstProj Term
      | SndProj Term
@@ -51,8 +57,13 @@ instance Show Type where
          show (TTuple t) = "{" ++ (foldl (++) "" (intersperse "," $ map show t)) ++ "}"
          show (TRecord t) = "{" ++ (foldl (++) "" (intersperse "," $ map (\(label, ty)-> label ++ "=" ++ show ty) t)) ++ "}"
 
+--instance Show Pattern where
+--         show (PVar x) = x
+--         show (PRecord fields) = "{" ++ (foldl (++) "" (intersperse "," $ map (\(label, pat)-> label ++ "=" ++ show pat) fields)) ++ "}"
+
 instance Show Term where
          show (Var x) = show x
+         show (VarS x) = x
          show (Abs _ e) = "\\" ++ "." ++ show e
          show (App l r) = show l ++ " " ++ show r
          show TZero = "[0]"
@@ -215,6 +226,14 @@ termSubstTop s t = shift (-1) (subst 0 (shift 1 s) t)
 
 -- ---------------------------------
 
+-- ? hmmm we need a new context!
+match a b = a
+match1 p@(VarS s) v = termSubstTop v p
+match2 (Tuple pfields) (Tuple tfields) = 
+      map (\(p, t) -> match p t) (zip pfields tfields)
+
+-- ---------------------------------
+
 eval1 :: Context -> Term -> Maybe Term
 
 eval1 ctx (Tas v2 _) | isval ctx v2 = Just v2
@@ -306,6 +325,15 @@ eval1 ctx arg@(Tuple t) = do
                     evalme' <- eval1 ctx evalme
                     return (Tuple (foldl (++) [] [values, [evalme'], rest]))
 
+
+-- Pattern matching
+eval1 ctx (TPLet p v expr) | isval ctx v =
+      let left = match p v in do
+      return (App left expr)
+
+eval1 ctx (TPLet p t expr) | not $ isval ctx t =  do
+      t' <- eval1 ctx t
+      return (TPLet p t' expr)
 
 -- Records
 
